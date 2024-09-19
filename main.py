@@ -6,47 +6,181 @@ from PIL import Image, ImageTk
 import wave
 import simpleaudio as sa
 import os
-import sys
 
-# Define Helper Functions for Bit Manipulation
-def bytes_to_bits(data):
-    bits = []
-    for byte in data:
-        for i in range(8):
-            bits.append((byte >> (7 - i)) & 1)
-    return bits
+from PIL import Image
 
-def bits_to_bytes(bits):
-    bytes_data = bytearray()
-    for b in range(0, len(bits), 8):
-        byte = 0
-        for i in range(8):
-            if b + i < len(bits):
-                byte = (byte << 1) | bits[b + i]
-        bytes_data.append(byte)
-    return bytes_data
+if hasattr(Image, 'Resampling'):
+    resample_method = Image.Resampling.LANCZOS
+else:
+    resample_method = Image.ANTIALIAS
 
-def set_bits(byte_value, data_bits, num_lsb):
-    mask = (1 << num_lsb) - 1  # Mask for num_lsb bits
-    byte_value = (byte_value & ~mask) | (data_bits & mask)
-    return byte_value
 
-def get_bits(byte_value, num_lsb):
-    mask = (1 << num_lsb) - 1
-    return byte_value & mask
+# Main application class
+class SteganographyApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("LSB Steganography Tool")
+        self.root.geometry("800x600")
+        self.root.resizable(False, False)
 
-# Implement Image Steganography Functions
+        # Variables to store file paths and options
+        self.payload_path = tk.StringVar()
+        self.cover_path = tk.StringVar()
+        self.stego_path = tk.StringVar()
+        self.num_lsbs = tk.IntVar(value=1)
+        self.file_type = tk.StringVar()
 
-# Embedding Data into Image
-def embed_data_into_image(cover_image_path, payload_path, num_lsb, output_path):
-    img = Image.open(cover_image_path)
-    pixels = img.load()
-    width, height = img.size
-    num_channels = len(pixels[0,0]) if isinstance(pixels[0,0], tuple) else 1
+        # List to keep references to images
+        self.image_refs = []
 
-    # Read payload
-    with open(payload_path, 'rb') as f:
-        payload_data = f.read()
+        # Create the landing page
+        self.create_landing_page()
+
+    def create_landing_page(self):
+        # Clear the window
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Title Label
+        title_label = tk.Label(self.root, text="LSB Steganography Tool", font=("Helvetica", 24))
+        title_label.pack(pady=40)
+
+        # Description Label
+        desc_label = tk.Label(self.root, text="Choose an option to proceed:", font=("Helvetica", 14))
+        desc_label.pack(pady=20)
+
+        # Encode Button
+        encode_button = tk.Button(self.root, text="Encode (Embed)", font=("Helvetica", 16),
+                                  width=20, command=self.create_encode_page)
+        encode_button.pack(pady=10)
+
+        # Decode Button
+        decode_button = tk.Button(self.root, text="Decode (Extract)", font=("Helvetica", 16),
+                                  width=20, command=self.create_decode_page)
+        decode_button.pack(pady=10)
+
+    def create_encode_page(self):
+        # Clear the window
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Back Button
+        back_button = tk.Button(self.root, text="Back", command=self.create_landing_page)
+        back_button.pack(anchor='nw', padx=10, pady=10)
+
+        # Title Label
+        title_label = tk.Label(self.root, text="Encode (Embed Payload)", font=("Helvetica", 20))
+        title_label.pack(pady=10)
+
+        # Frame for input selections
+        input_frame = tk.Frame(self.root)
+        input_frame.pack(pady=10)
+
+        # Payload Selection
+        payload_label = tk.Label(input_frame, text="Select Payload (Text File):")
+        payload_label.grid(row=0, column=0, sticky='e', padx=5, pady=5)
+        payload_entry = tk.Entry(input_frame, textvariable=self.payload_path, width=50)
+        payload_entry.grid(row=0, column=1, padx=5, pady=5)
+        payload_button = tk.Button(input_frame, text="Browse", command=self.select_payload)
+        payload_button.grid(row=0, column=2, padx=5, pady=5)
+
+        # Cover Object Selection
+        cover_label = tk.Label(input_frame, text="Select Cover Object (Image File):")
+        cover_label.grid(row=1, column=0, sticky='e', padx=5, pady=5)
+        cover_entry = tk.Entry(input_frame, textvariable=self.cover_path, width=50)
+        cover_entry.grid(row=1, column=1, padx=5, pady=5)
+        cover_button = tk.Button(input_frame, text="Browse", command=self.select_cover)
+        cover_button.grid(row=1, column=2, padx=5, pady=5)
+
+        # Number of LSBs Selection
+        lsb_label = tk.Label(input_frame, text="Number of LSBs to Use (1-8):")
+        lsb_label.grid(row=2, column=0, sticky='e', padx=5, pady=5)
+        lsb_spinbox = tk.Spinbox(input_frame, from_=1, to=8, textvariable=self.num_lsbs, width=5)
+        lsb_spinbox.grid(row=2, column=1, sticky='w', padx=5, pady=5)
+
+        # Embed Button
+        embed_button = tk.Button(self.root, text="Embed and Save Stego Object", font=("Helvetica", 14),
+                                 command=self.embed_payload)
+        embed_button.pack(pady=20)
+
+    def select_payload(self):
+        file_path = filedialog.askopenfilename(title="Select Payload (Text File)",
+                                               filetypes=[("Text Files", "*.txt")])
+        if file_path:
+            self.payload_path.set(file_path)
+
+    def select_cover(self):
+        file_path = filedialog.askopenfilename(title="Select Cover Object (Image File)",
+                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")]
+)
+        if file_path:
+            self.cover_path.set(file_path)
+            self.file_type.set('image')  # Currently supporting images only
+
+    def embed_payload(self):
+        payload_path = self.payload_path.get()
+        cover_path = self.cover_path.get()
+        num_lsbs = self.num_lsbs.get()
+
+        # Validate inputs
+        if not payload_path or not cover_path:
+            messagebox.showerror("Input Error", "Please select both a payload and a cover object.")
+            return
+
+        # Check capacity
+        can_embed = self.check_capacity(cover_path, payload_path, num_lsbs)
+        if not can_embed:
+            return
+
+        # Embed the payload
+        stego_image = self.embed_into_image(cover_path, payload_path, num_lsbs)
+        if stego_image:
+            # Save stego object
+            save_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                     filetypes=[("PNG Files", "*.png")],
+                                                     title="Save Stego Object As")
+            if save_path:
+                stego_image.save(save_path)
+                self.stego_path.set(save_path)
+                messagebox.showinfo("Success", "Stego object saved successfully.")
+                # Display the payload, cover, and stego images
+                self.display_analysis(payload_path, cover_path, save_path)
+            else:
+                messagebox.showwarning("Cancelled", "Save operation cancelled.")
+        else:
+            messagebox.showerror("Embedding Error", "An error occurred during embedding.")
+
+    def check_capacity(self, cover_path, payload_path, num_lsbs):
+        # Calculate the capacity of the cover image
+        try:
+            cover_image = Image.open(cover_path)
+            width, height = cover_image.size
+            num_channels = len(cover_image.getbands())  # e.g., 3 for RGB
+            max_capacity = width * height * num_channels * num_lsbs // 8  # in bytes
+
+            # Get payload size
+            payload_size = os.path.getsize(payload_path)  # in bytes
+
+            if payload_size > max_capacity:
+                messagebox.showerror("Capacity Error",
+                                     f"The payload is too large to embed using {num_lsbs} LSB(s).\n"
+                                     f"Maximum Capacity: {max_capacity} bytes\n"
+                                     f"Payload Size: {payload_size} bytes")
+                return False
+            else:
+                return True
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred while checking capacity:\n{str(e)}")
+            return False
+
+    def embed_into_image(self, cover_path, payload_path, num_lsbs):
+        try:
+            cover_image = Image.open(cover_path)
+            cover_pixels = cover_image.load()
+
+            # Read payload data
+            with open(payload_path, 'rb') as f:
+                payload_data = f.read()
 
     # Add header for payload size
     payload_length = len(payload_data)
@@ -318,17 +452,95 @@ class SteganographyApp:
                 extract_data_from_audio(self.cover_file_path, num_lsb, output_payload_path)
             messagebox.showinfo("Success", "Data extracted successfully!")
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Image Loading Error", f"Failed to load images:\n{str(e)}")
+            return
 
-    def display_cover(self):
-        if self.mode.get() == 'Image':
-            self.show_image(self.cover_file_path)
-        else:
-            self.play_audio(self.cover_file_path)
+        width, height = cover_image.size
+        diff_image = Image.new('RGB', (width, height))
 
-    def display_stego(self):
-        if self.mode.get() == 'Image':
-            self.show_image(self.output_file_path)
+        for x in range(width):
+            for y in range(height):
+                cover_pixel = cover_image.getpixel((x, y))
+                stego_pixel = stego_image.getpixel((x, y))
+                diff_pixel = tuple(
+                    min(abs(c - s) * 10, 255) for c, s in zip(cover_pixel, stego_pixel))  # Amplify difference
+                diff_image.putpixel((x, y), diff_pixel)
+
+        diff_image = diff_image.resize((200, 200), Image.LANCZOS)
+        diff_photo = ImageTk.PhotoImage(diff_image)
+        diff_label = tk.Label(parent_frame, image=diff_photo)
+        diff_label.pack(pady=10)
+
+        # Keep a reference to prevent garbage collection
+        self.image_refs.append(diff_photo)
+
+    def create_decode_page(self):
+        # Clear the window
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Back Button
+        back_button = tk.Button(self.root, text="Back", command=self.create_landing_page)
+        back_button.pack(anchor='nw', padx=10, pady=10)
+
+        # Title Label
+        title_label = tk.Label(self.root, text="Decode (Extract Payload)", font=("Helvetica", 20))
+        title_label.pack(pady=10)
+
+        # Frame for input selections
+        input_frame = tk.Frame(self.root)
+        input_frame.pack(pady=10)
+
+        # Stego Object Selection
+        stego_label = tk.Label(input_frame, text="Select Stego Object (Image File):")
+        stego_label.grid(row=0, column=0, sticky='e', padx=5, pady=5)
+        stego_entry = tk.Entry(input_frame, textvariable=self.stego_path, width=50)
+        stego_entry.grid(row=0, column=1, padx=5, pady=5)
+        stego_button = tk.Button(input_frame, text="Browse", command=self.select_stego)
+        stego_button.grid(row=0, column=2, padx=5, pady=5)
+
+        # Number of LSBs Selection
+        lsb_label = tk.Label(input_frame, text="Number of LSBs Used (1-8):")
+        lsb_label.grid(row=1, column=0, sticky='e', padx=5, pady=5)
+        lsb_spinbox = tk.Spinbox(input_frame, from_=1, to=8, textvariable=self.num_lsbs, width=5)
+        lsb_spinbox.grid(row=1, column=1, sticky='w', padx=5, pady=5)
+
+        # Extract Button
+        extract_button = tk.Button(self.root, text="Extract Payload", font=("Helvetica", 14),
+                                   command=self.extract_payload)
+        extract_button.pack(pady=20)
+
+    def select_stego(self):
+        file_path = filedialog.askopenfilename(title="Select Stego Object (Image File)",
+                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")])
+        if file_path:
+            self.stego_path.set(file_path)
+            self.file_type.set('image')  # Currently supporting images only
+
+    def extract_payload(self):
+        stego_path = self.stego_path.get()
+        num_lsbs = self.num_lsbs.get()
+
+        # Validate inputs
+        if not stego_path:
+            messagebox.showerror("Input Error", "Please select a stego object.")
+            return
+
+        # Extract the payload
+        decoded_data = self.extract_from_image(stego_path, num_lsbs)
+        if decoded_data:
+            # Save decoded message
+            save_path = filedialog.asksaveasfilename(defaultextension=".txt",
+                                                     filetypes=[("Text Files", "*.txt")],
+                                                     title="Save Decoded Payload As")
+            if save_path:
+                with open(save_path, 'w', encoding='utf-8', errors='replace') as f:
+                    f.write(decoded_data)
+                messagebox.showinfo("Success", "Payload extracted and saved successfully.")
+                # Display the decoded message
+                self.display_decoded_message(decoded_data)
+            else:
+                messagebox.showwarning("Cancelled", "Save operation cancelled.")
         else:
             self.play_audio(self.output_file_path)
 
