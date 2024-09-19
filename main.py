@@ -108,7 +108,8 @@ class SteganographyApp:
 
     def select_cover(self):
         file_path = filedialog.askopenfilename(title="Select Cover Object (Image File)",
-                                               filetypes=[("Image Files", "*.bmp;*.png;*.gif")])
+                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")]
+)
         if file_path:
             self.cover_path.set(file_path)
             self.file_type.set('image')  # Currently supporting images only
@@ -355,7 +356,7 @@ class SteganographyApp:
 
     def select_stego(self):
         file_path = filedialog.askopenfilename(title="Select Stego Object (Image File)",
-                                               filetypes=[("Image Files", "*.bmp;*.png;*.gif")])
+                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")])
         if file_path:
             self.stego_path.set(file_path)
             self.file_type.set('image')  # Currently supporting images only
