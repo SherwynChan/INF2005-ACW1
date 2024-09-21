@@ -3,7 +3,7 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 from PIL import Image, ImageTk
 import os
-
+import wave
 from PIL import Image
 
 if hasattr(Image, 'Resampling'):
@@ -81,8 +81,8 @@ class SteganographyApp:
         payload_button = tk.Button(input_frame, text="Browse", command=self.select_payload)
         payload_button.grid(row=0, column=2, padx=5, pady=5)
 
-        # Cover Object Selection
-        cover_label = tk.Label(input_frame, text="Select Cover Object (Image File):")
+       # Cover Object Selection (Image or Audio)
+        cover_label = tk.Label(input_frame, text="Select Cover Object (Image or Audio File):")
         cover_label.grid(row=1, column=0, sticky='e', padx=5, pady=5)
         cover_entry = tk.Entry(input_frame, textvariable=self.cover_path, width=50)
         cover_entry.grid(row=1, column=1, padx=5, pady=5)
@@ -107,12 +107,14 @@ class SteganographyApp:
             self.payload_path.set(file_path)
 
     def select_cover(self):
-        file_path = filedialog.askopenfilename(title="Select Cover Object (Image File)",
-                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")]
-)
+        file_path = filedialog.askopenfilename(title="Select Cover Object (Image or Audio File)",
+                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif"),("Audio Files", "*.wav")])
         if file_path:
             self.cover_path.set(file_path)
-            self.file_type.set('image')  # Currently supporting images only
+            if file_path.lower().endswith('wav'):
+                self.file_type.set('audio') # wav audio file
+            else:
+                self.file_type.set('image')  # Currently supporting images only
 
     def embed_payload(self):
         payload_path = self.payload_path.get()
@@ -124,37 +126,60 @@ class SteganographyApp:
             messagebox.showerror("Input Error", "Please select both a payload and a cover object.")
             return
 
-        # Check capacity
+        # Check capacity(image or audio)
         can_embed = self.check_capacity(cover_path, payload_path, num_lsbs)
         if not can_embed:
             return
 
-        # Embed the payload
-        stego_image = self.embed_into_image(cover_path, payload_path, num_lsbs)
-        if stego_image:
-            # Save stego object
-            save_path = filedialog.asksaveasfilename(defaultextension=".png",
+        # Embed based on file type
+        if self.file_type.get() == 'image':
+            # Embed the payload
+            stego_image = self.embed_into_image(cover_path, payload_path, num_lsbs)
+            if stego_image:
+                # Save stego object
+                save_path = filedialog.asksaveasfilename(defaultextension=".png",
                                                      filetypes=[("PNG Files", "*.png")],
                                                      title="Save Stego Object As")
-            if save_path:
-                stego_image.save(save_path)
-                self.stego_path.set(save_path)
-                messagebox.showinfo("Success", "Stego object saved successfully.")
-                # Display the payload, cover, and stego images
-                self.display_analysis(payload_path, cover_path, save_path)
+                if save_path:
+                    stego_image.save(save_path)
+                    self.stego_path.set(save_path)
+                    messagebox.showinfo("Success", "Stego object saved successfully.")
+                    # Display the payload, cover, and stego images
+                    self.display_analysis(payload_path, cover_path, save_path)
+                else:
+                    messagebox.showwarning("Cancelled", "Save operation cancelled.")
             else:
-                messagebox.showwarning("Cancelled", "Save operation cancelled.")
-        else:
-            messagebox.showerror("Embedding Error", "An error occurred during embedding.")
-
+                messagebox.showerror("Embedding Error", "An error occurred during embedding.")
+        elif self.file_type.get() == 'audio':
+            stego_audio = self.embed_payload_audio(cover_path, payload_path, num_lsbs)
+            if stego_audio:
+                #save stego object
+                save_path = filedialog.asksaveasfilename(defaultextension=".wav",filetypes=[("WAV Files", "*.wav")],title="Save Stego Object As")
+                if save_path:
+                    os.rename(stego_audio, save_path)
+                    self.stego_path.set(save_path)
+                    messagebox.showinfo("Success", "Stego object saved successfully.")
+                else: 
+                    messagebox.showwarning("Cancelled", "Save operation cancelled.")
+            else:
+                messagebox.showerror("Embedding Error", "An error occurred during embedding.")
     def check_capacity(self, cover_path, payload_path, num_lsbs):
         # Calculate the capacity of the cover image
         try:
-            cover_image = Image.open(cover_path)
-            width, height = cover_image.size
-            num_channels = len(cover_image.getbands())  # e.g., 3 for RGB
-            max_capacity = width * height * num_channels * num_lsbs // 8  # in bytes
-
+            #check file type before calculation
+            if self.file_type.get() == 'image':
+                cover_image = Image.open(cover_path)
+                width, height = cover_image.size
+                num_channels = len(cover_image.getbands())  # e.g., 3 for RGB
+                max_capacity = width * height * num_channels * num_lsbs // 8  # in bytes
+            elif self.file_type.get() == 'audio':
+                #For audio files, the capacity is calculated in bits
+                with wave.open(cover_path, 'rb') as audio_file:
+                    num_frames = audio_file.getnframes()
+                    num_channels = audio_file.getnchannels()
+                    sample_width = audio_file.getsampwidth()  # in bytes (e.g., 2 bytes for 16-bit)
+                    max_capacity = num_frames * num_channels * num_lsbs // 8  # in bytes               
+           
             # Get payload size
             payload_size = os.path.getsize(payload_path)  # in bytes
 
@@ -215,7 +240,44 @@ class SteganographyApp:
         except Exception as e:
             messagebox.showerror("Embedding Error", f"An error occurred during embedding:\n{str(e)}")
             return None
+    
+    def embed_payload_audio(self, cover_audio_path, payload_path, num_lsbs):
+        try:
+            # Open the audio file
+            with wave.open(cover_audio_path, 'rb') as audio:
+                frame_bytes = bytearray(list(audio.readframes(audio.getnframes())))
 
+            # Read the payload data
+            with open(payload_path, 'r') as f:
+                payload_data = f.read()
+
+            # Convert payload to binary string
+            payload_bits = ''.join([format(ord(i), '08b') for i in payload_data])
+            payload_bits += '1111111111111110'  # 16-bit delimiter to mark the end
+
+            # Check capacity
+            if len(payload_bits) > len(frame_bytes) * num_lsbs:
+                messagebox.showerror("Capacity Error", "Payload is too large for the selected audio file.")
+                return None
+
+            # Embed the payload into the LSBs of the audio samples
+            bit_index = 0
+            for i in range(len(frame_bytes)):
+                if bit_index < len(payload_bits):
+                    frame_bytes[i] = (frame_bytes[i] & 254) | int(payload_bits[bit_index])
+                    bit_index += 1
+
+            # Write the modified frames to a new audio file
+            output_audio = "stego_audio.wav"
+            with wave.open(output_audio, 'wb') as stego_audio:
+                stego_audio.setparams(audio.getparams())
+                stego_audio.writeframes(bytes(frame_bytes))
+
+            return output_audio
+
+        except Exception as e:
+            messagebox.showerror("Embedding Error", f"An error occurred during embedding:\n{str(e)}")
+            return None
     def set_lsbs(self, value, num_lsbs, bits):
         # Set the num_lsbs least significant bits of value to bits
         bits = bits.ljust(num_lsbs, '0')  # Pad bits if less than num_lsbs
@@ -359,7 +421,10 @@ class SteganographyApp:
                                                filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")])
         if file_path:
             self.stego_path.set(file_path)
-            self.file_type.set('image')  # Currently supporting images only
+            if file_path.lower().endswith('wav'):
+                self.file_type.set('audio') # wav audio file
+            else:
+                self.file_type.set('image')  # Currently supporting images only
 
     def extract_payload(self):
         stego_path = self.stego_path.get()
@@ -370,8 +435,14 @@ class SteganographyApp:
             messagebox.showerror("Input Error", "Please select a stego object.")
             return
 
-        # Extract the payload
-        decoded_data = self.extract_from_image(stego_path, num_lsbs)
+        file_type = self.file_type.get()
+        if file_type == 'audio':
+            decoded_data = self.extract_from_audio(stego_path, num_lsbs)
+        elif file_type == 'image':
+            decoded_data = self.extract_from_image(stego_path, num_lsbs)
+        else:
+            messagebox.showerror("Input Error", "Unknown file type. Please select a valid stego object.")
+            return
         if decoded_data:
             # Save decoded message
             save_path = filedialog.asksaveasfilename(defaultextension=".txt",
@@ -411,6 +482,31 @@ class SteganographyApp:
                             # Decode bytes to string
                             decoded_data = payload_bytes.decode('utf-8', errors='replace')
                             return decoded_data
+            # If delimiter not found
+            messagebox.showwarning("Extraction Warning", "Delimiter not found. Payload may be incomplete.")
+            return None
+        except Exception as e:
+            messagebox.showerror("Extraction Error", f"An error occurred during extraction:\n{str(e)}")
+            return None
+    
+    def extract_from_audio(self, stego_path, num_lsbs):
+        try:
+            with wave.open(stego_path, 'rb') as wav_file:
+                num_frames = wav_file.getnframes()
+                frames = wav_file.readframes(num_frames)
+        
+            bits = ''
+            for byte in frames:
+                bits += self.get_lsbs(byte, num_lsbs)
+                # Check for delimiter
+                if bits.endswith('1111111111111110'):
+                    bits = bits[:-16]  # Remove the delimiter
+                    # Convert bits to bytes
+                    payload_bytes = int(bits, 2).to_bytes(len(bits) // 8, byteorder='big')
+                    # Decode bytes to string
+                    decoded_data = payload_bytes.decode('utf-8', errors='replace')
+                    return decoded_data
+
             # If delimiter not found
             messagebox.showwarning("Extraction Warning", "Delimiter not found. Payload may be incomplete.")
             return None
