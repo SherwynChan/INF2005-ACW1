@@ -10,7 +10,7 @@ if hasattr(Image, 'Resampling'):
     resample_method = Image.Resampling.LANCZOS
 else:
     resample_method = Image.ANTIALIAS
-
+#TEST DETELE
 #test=
 # Main application class
 class SteganographyApp:
