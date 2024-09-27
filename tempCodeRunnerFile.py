@@ -98,7 +98,6 @@ class SteganographyApp:
         file_path = filedialog.askopenfilename(
             title="Select Cover Object (Image File)",
             filetypes=[
-                ("All Image Files", "*.bmp;*.png;*.gif;*.jpeg;*.jpg"),
                 ("BMP Files", "*.bmp"),
                 ("PNG Files", "*.png"),
                 ("GIF Files", "*.gif"),
@@ -315,63 +314,48 @@ class SteganographyApp:
         # Keep a reference to prevent garbage collection
         self.image_refs.append(diff_photo)
 
-    def select_stego(self):
-        file_path = filedialog.askopenfilename(
-            title="Select Stego Object (Image File)",
-            filetypes=[
-                ("Image Files", "*.png;*.bmp;*.jpg;*.jpeg;*.gif"),
-                ("All Files", "*.*")
-            ]
-        )
-        if file_path:
-            self.stego_path.set(file_path)
-            print(f"Selected stego file: {file_path}")  # Debug print
-
     def create_decode_page(self):
-        self.clear_window()
-        
+        # Clear the window
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
         # Back Button
         back_button = ttkb.Button(self.root, text="Back", command=self.create_landing_page)
         back_button.pack(anchor='nw', padx=10, pady=10)
 
-        # Title
+        # Title Label
         title_label = ttkb.Label(self.root, text="Decode (Extract Payload)", font=("Helvetica", 20))
         title_label.pack(pady=10)
 
         # Frame for input selections
         input_frame = ttkb.Frame(self.root)
-        input_frame.pack(pady=10, padx=20, fill='x')
+        input_frame.pack(pady=10)
 
         # Stego Object Selection
         stego_label = ttkb.Label(input_frame, text="Select Stego Object (Image File):")
-        stego_label.grid(row=0, column=0, sticky='w', padx=5, pady=5)
-        
+        stego_label.grid(row=0, column=0, sticky='e', padx=5, pady=5)
         stego_entry = ttkb.Entry(input_frame, textvariable=self.stego_path, width=50)
         stego_entry.grid(row=0, column=1, padx=5, pady=5)
-        
         stego_button = ttkb.Button(input_frame, text="Browse", command=self.select_stego)
         stego_button.grid(row=0, column=2, padx=5, pady=5)
 
         # Number of LSBs Selection
         lsb_label = ttkb.Label(input_frame, text="Number of LSBs Used (1-8):")
-        lsb_label.grid(row=1, column=0, sticky='w', padx=5, pady=5)
-        
+        lsb_label.grid(row=1, column=0, sticky='e', padx=5, pady=5)
         lsb_spinbox = ttkb.Spinbox(input_frame, from_=1, to=8, textvariable=self.num_lsbs, width=5)
         lsb_spinbox.grid(row=1, column=1, sticky='w', padx=5, pady=5)
 
         # Extract Button
-        extract_button = ttkb.Button(
-            self.root, 
-            text="Extract Payload",
-            bootstyle="primary",
-            command=self.extract_payload
-        )
+        extract_button = ttkb.Button(self.root, text="Extract Payload", font=("Helvetica", 14),
+                                   command=self.extract_payload)
         extract_button.pack(pady=20)
 
-        # Apply a style to make the button text larger
-        self.style.configure('Large.TButton', font=("Helvetica", 14))
-        extract_button.configure(style='Large.TButton')
-
+    def select_stego(self):
+        file_path = filedialog.askopenfilename(title="Select Stego Object (Image File)",
+                                               filetypes=[("BMP Files", "*.bmp"), ("PNG Files", "*.png"), ("GIF Files", "*.gif")])
+        if file_path:
+            self.stego_path.set(file_path)
+            self.file_type.set('image')  # Currently supporting images only
 
     def extract_payload(self):
         stego_path = self.stego_path.get()
