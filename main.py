@@ -206,15 +206,6 @@ class SteganographyApp:
                             pixel[n] = self.set_lsbs(pixel[n], num_lsbs, payload_bits[bit_index:bit_index+num_lsbs])
                             bit_index += num_lsbs
                     cover_pixels[x, y] = tuple(pixel)
-                    if bit_index >= len(payload_bits):
-                        break
-                if bit_index >= len(payload_bits):
-                    break
-
-            return cover_image
-        except Exception as e:
-            messagebox.showerror("Embedding Error", f"An error occurred during embedding:\n{str(e)}")
-            return None
 
     def set_lsbs(self, value, num_lsbs, bits):
         # Set the num_lsbs least significant bits of value to bits
