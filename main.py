@@ -4,8 +4,6 @@ from steganography_core import embed_payload, extract_payload
 import matplotlib.pyplot as plt
 import numpy as np
 import wave
-from PIL import Image
-import scipy.signal as signal
 
 # Streamlit app title
 st.title("LSB Steganography Tool")
@@ -144,10 +142,10 @@ if app_mode == "Decode (Extract)":
             # Check file type and handle extraction
             if file_type == "audio" and is_valid_wav(temp_file_path):
                 extracted_data = extract_payload(temp_file_path, num_lsbs, file_type)
-                st.text_area("Extracted Payload", extracted_data)
+                st.text_area("Extracted Payload", extracted_data, height=500)
             elif file_type == "image":
                 extracted_data = extract_payload(temp_file_path, num_lsbs, file_type)
-                st.text_area("Extracted Payload", extracted_data)
+                st.text_area("Extracted Payload", extracted_data, height=500)
             else:
                 st.error("Unsupported file type or invalid audio file. Please check the file and try again.")
         else:

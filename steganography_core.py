@@ -7,7 +7,7 @@ def embed_payload(cover_path, payload_path, num_lsbs, file_type):
     """Embed the payload into the cover object (audio or image)."""
     
     # Convert the payload into a bit stream
-    payload_bits = convert_payload_to_bits(payload_path)
+    payload_bits = convert_payload_to_bits(payload_path, num_lsbs)
 
     # Embed based on file type (image or audio)
     if file_type == 'image':
