@@ -11,10 +11,16 @@ st.title("LSB Steganography Tool")
 # Sidebar for navigation between Encode and Decode
 app_mode = st.sidebar.selectbox("Choose the mode", ["Encode (Embed)", "Decode (Extract)"])
 
+# Initialize session state variables for embedded file
+if "embedded_stego_file" not in st.session_state:
+    st.session_state.embedded_stego_file = None
+if "embedded_file_type" not in st.session_state:
+    st.session_state.embedded_file_type = None
+
 # For Encode Mode
 if app_mode == "Encode (Embed)":
     st.header("Encode (Embed Payload)")
-    
+
     # File upload for payload (text)
     payload_file = st.file_uploader("Upload Payload (Text File)", type=["txt"])
 
@@ -27,11 +33,12 @@ if app_mode == "Encode (Embed)":
     # Select File Type (Image or Audio)
     file_type = st.selectbox("File Type", ["image", "audio"])
 
-    # Ask the user for a filename
-    output_filename = st.text_input("Enter the filename (without extension):", value="stego_file")
+    # Display the uploaded cover image immediately
+    if cover_file and cover_file.type.startswith("image"):
+        st.image(cover_file, caption="Cover Image", use_column_width=True)
 
     # Embed Button
-    if st.button("Embed and Save Stego Object"):
+    if st.button("Embed"):
         if payload_file and cover_file:
             # Write the uploaded files to temporary paths
             with open("temp_payload.txt", "wb") as f:
@@ -43,17 +50,43 @@ if app_mode == "Encode (Embed)":
             file_extension = "png" if file_type == "image" else "wav"
             stego_file = embed_payload("temp_cover." + cover_file.name.split(".")[-1], "temp_payload.txt", num_lsbs, file_type)
 
+            # Store the stego file path in session state for the next step
+            st.session_state.embedded_stego_file = stego_file
+            st.session_state.embedded_file_type = file_extension
+
+            st.success("Payload successfully embedded! See the result below.")
+
+            # Display the embedded image or audio immediately
+            if file_type == "image":
+                st.image(stego_file, caption="Embedded Stego Image", use_column_width=True)
+            else:
+                st.audio(stego_file, format='audio/wav')
+        else:
+            st.error("Please upload both a payload and a cover object!")
+
+    # If an embedded file exists, show the option to save it
+    if st.session_state.embedded_stego_file:
+        st.subheader("Save the Embedded Stego File")
+        
+        # Ask the user for a filename
+        output_filename = st.text_input("Enter the filename (without extension):", value="stego_file")
+
+        # Save Button
+        if st.button("Save Stego File"):
             # Ensure output folder exists
             if not os.path.exists("output"):
                 os.makedirs("output")
 
-            # Move the stego file to the chosen output filename
-            final_output_path = f"output/{output_filename}.{file_extension}"
-            os.rename(stego_file, final_output_path)
+            # Create the final output path
+            final_output_path = f"output/{output_filename}.{st.session_state.embedded_file_type}"
+
+            # Move or copy the embedded file to the desired location
+            os.rename(st.session_state.embedded_stego_file, final_output_path)
 
             st.success(f"Stego object saved as: {final_output_path}")
-        else:
-            st.error("Please upload both a payload and a cover object!")
+            # Clear the session state to reset for new embeddings
+            st.session_state.embedded_stego_file = None
+            st.session_state.embedded_file_type = None
 
 
 def plot_waveform(audio_file, downsample_factor=10, smooth=False):
