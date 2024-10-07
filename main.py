@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from steganography_core import embed_payload, extract_payload
+from steganography_core import embed_payload, embed_zip_payload, extract_payload, extract_zip_payload
 import matplotlib.pyplot as plt
 import numpy as np
 import wave
@@ -23,44 +23,85 @@ if app_mode == "Encode (Embed)":
 
     # File upload for payload (text)
     payload_file = st.file_uploader("Upload Payload (Text File)", type=["txt"])
+    zip_file = st.file_uploader("Upload Payload - Only for Video-Metadata (ZIP)", type=["ZIP"])
 
     # File upload for cover file (Image or Audio)
-    cover_file = st.file_uploader("Upload Cover Object (Image/Audio)", type=["bmp", "png", "gif", "wav"])
+    cover_file = st.file_uploader("Upload Cover Object (Image/Audio/Video)", type=["bmp", "png", "gif", "wav", "mp4"])
 
     # Number of LSBs to use
     num_lsbs = st.slider("Number of LSBs to Use", min_value=1, max_value=8, value=1)
 
     # Select File Type (Image or Audio)
-    file_type = st.selectbox("File Type", ["image", "audio"])
+    file_type = st.selectbox("File Type", ["image", "audio", "video", "video-metadata"])
 
-    # Display the uploaded cover image immediately
-    if cover_file and cover_file.type.startswith("image"):
-        st.image(cover_file, caption="Cover Image", use_column_width=True)
+    # Display preview of the uploaded media
+    if cover_file:
+        
+        # Image
+        if cover_file.type.startswith("image"): 
+            st.image(cover_file, caption="Cover Image", use_column_width=True)
+        
+        # Video
+        elif cover_file.type.startswith("video"):
+            print(f"Cover_file: {cover_file}")
+            st.video(cover_file)
 
     # Embed Button
     if st.button("Embed"):
-        if payload_file and cover_file:
-            # Write the uploaded files to temporary paths
-            with open("temp_payload.txt", "wb") as f:
-                f.write(payload_file.read())
+        if (payload_file or zip_file) and cover_file:
+            
+            if payload_file:
+                # Write the uploaded files to temporary paths
+                with open("temp_payload.txt", "wb") as f:
+                    f.write(payload_file.read())
+                
             with open("temp_cover." + cover_file.name.split(".")[-1], "wb") as f:
                 f.write(cover_file.read())
 
             # Call the core embedding function
-            file_extension = "png" if file_type == "image" else "wav"
-            stego_file = embed_payload("temp_cover." + cover_file.name.split(".")[-1], "temp_payload.txt", num_lsbs, file_type)
+            
+            # Set correct success message
+            if file_type != 'video':
+                message = "Payload successfully embedded! See the result below."
+            else:
+                message = "Payload successfully embedded! Videos formatted in MKV are not able to be previewed via streamlit"
+            
+            if file_type == "image":
+                file_extension = "png"
+                
+            elif file_type == "audio":
+                file_extension = "wav"
+            else:
+                file_extension = "mp4"
+                           
+            if file_type == 'video-metadata':
+                print("ViDEO_METADATA")
+                stego_file = embed_zip_payload("temp_cover." + cover_file.name.split(".")[-1], zip_file)
+            else:
+                stego_file = embed_payload("temp_cover." + cover_file.name.split(".")[-1], "temp_payload.txt", num_lsbs, file_type)
+           
+            print(f"Stego_file path: {stego_file}")
 
             # Store the stego file path in session state for the next step
             st.session_state.embedded_stego_file = stego_file
             st.session_state.embedded_file_type = file_extension
 
-            st.success("Payload successfully embedded! See the result below.")
+            st.success(message)
 
-            # Display the embedded image or audio immediately
+            # Display the embedded image/audio/video immediately
             if file_type == "image":
                 st.image(stego_file, caption="Embedded Stego Image", use_column_width=True)
-            else:
+            elif file_type == "audio":
                 st.audio(stego_file, format='audio/wav')
+            elif file_type == "video":
+                if 'mkv' in stego_file: # Only preview video file if not in MKV format
+                    pass
+            elif file_type == "video-metadata":
+                video_file = open(stego_file, "rb")
+                video_bytes = video_file.read()
+                st.video(video_bytes)
+            else:
+                 st.error("Unsupported")
         else:
             st.error("Please upload both a payload and a cover object!")
 
@@ -78,7 +119,10 @@ if app_mode == "Encode (Embed)":
                 os.makedirs("output")
 
             # Create the final output path
-            final_output_path = f"output/{output_filename}.{st.session_state.embedded_file_type}"
+            if file_type == "video":
+                final_output_path = f"output/{output_filename}.mkv"
+            else:
+                final_output_path = f"output/{output_filename}.{st.session_state.embedded_file_type}"
 
             # Move or copy the embedded file to the desired location
             os.rename(st.session_state.embedded_stego_file, final_output_path)
@@ -133,13 +177,13 @@ if app_mode == "Decode (Extract)":
     st.header("Decode (Extract Payload)")
 
     # File upload for stego object (Image/Audio/Video)
-    stego_file = st.file_uploader("Upload Stego Object", type=["bmp", "png", "gif", "wav", "mp4"])
+    stego_file = st.file_uploader("Upload Stego Object", type=["bmp", "png", "gif", "wav", "mp4", "mkv"])
 
     # Number of LSBs used
     num_lsbs = st.slider("Number of LSBs Used", min_value=1, max_value=8, value=1)
 
     # Select File Type (Image, Audio, or Video)
-    file_type = st.selectbox("File Type", ["image", "audio", "video"])
+    file_type = st.selectbox("File Type", ["image", "audio", "video", "video-zip"])
 
     if stego_file:
         # Write the uploaded file to a temporary path
@@ -166,7 +210,10 @@ if app_mode == "Decode (Extract)":
                 st.error("Invalid or corrupted WAV file. Please upload a valid WAV file.")
 
         # Handle video display
-        elif file_type == "video" and stego_file.type == "video/mp4":
+        elif file_type == "video":
+            st.video(stego_file)
+            
+        elif file_type == "video-zip":
             st.video(stego_file)
 
     # Extract Button
@@ -179,6 +226,29 @@ if app_mode == "Decode (Extract)":
             elif file_type == "image":
                 extracted_data = extract_payload(temp_file_path, num_lsbs, file_type)
                 st.text_area("Extracted Payload", extracted_data, height=500)
+            elif file_type == "video":
+                extracted_data = extract_payload(temp_file_path, num_lsbs, file_type)
+                print("extracted_data returned")
+                st.text_area("Extracted Payload", extracted_data, height=500)
+            elif file_type == "video-zip":
+                extracted_data = extract_zip_payload(temp_file_path)
+                if extracted_data:
+                    
+                    st.success("File has been successfully extracted")
+                    
+                    with open("./output/extract.zip", 'rb') as file:
+                        file_data = file.read()
+                    
+                    st.download_button(
+                            label="Download ZIP File",
+                            data=file_data,  # The byte data to download
+                            file_name="extract.zip",  # The name of the file to download
+                            mime='application/zip')  # The MIME type for ZIP files
+                        
+                    
+                else:
+                    st.error("No zip file found")
+                
             else:
                 st.error("Unsupported file type or invalid audio file. Please check the file and try again.")
         else:
